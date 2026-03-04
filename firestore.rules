@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuth() { return request.auth != null; }
+    function isOwner(uid) { return request.auth.uid == uid; }
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isVendor() { return getUserRole() == "Vendor"; }
+    function isOrganizer() { return getUserRole() == "MarketOrganizer"; }
+    function isAdmin() { return getUserRole() == "Admin"; }
+
+    // Users
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isAuth() && isOwner(userId);
+      allow update: if isAuth() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Markets
+    match /markets/{marketId} {
+      allow read: if true;
+      allow create: if isAuth() && (isOrganizer() || isAdmin());
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (isOrganizer() && resource.data.organizerId == request.auth.uid)
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Events
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isAuth() && (isOrganizer() || isAdmin());
+      allow update, delete: if isAuth() && (
+        isAdmin() ||
+        (isOrganizer() && resource.data.organizerId == request.auth.uid)
+      );
+    }
+
+    // Posts
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        isOwner(resource.data.authorId) || isAdmin()
+      );
+      allow delete: if isAuth() && (
+        isOwner(resource.data.authorId) || isAdmin()
+      );
+    }
+
+    // Alert Subscriptions
+    match /alertSubscriptions/{subId} {
+      allow read: if isAuth() && isOwner(resource.data.userId);
+      allow create: if isAuth() && isOwner(request.resource.data.userId);
+      allow delete: if isAuth() && isOwner(resource.data.userId);
+    }
+
+    // RSVPs
+    match /rsvps/{rsvpId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && isOwner(request.resource.data.userId);
+      allow delete: if isAuth() && isOwner(resource.data.userId);
+    }
+
+    // Role Applications
+    match /roleApplications/{appId} {
+      allow read: if isAuth() && (
+        isOwner(resource.data.userId) || isAdmin()
+      );
+      allow create: if isAuth() && isOwner(request.resource.data.userId);
+      allow update: if isAdmin();
+    }
+
+    // Comments
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isAuth() && (
+        isOwner(resource.data.authorId) || isAdmin()
+      );
+    }
+  }
+}
